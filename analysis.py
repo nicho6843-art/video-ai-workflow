@@ -1,4 +1,4 @@
-import cv2
+import subprocess
 import base64
 import os
 import json
@@ -7,9 +7,9 @@ from anthropic import Anthropic
 from typing import Optional
 
 
-def extract_keyframes(video_path: str, sample_interval: float = 0.5) -> list[tuple[float, bytes]]:
+def extract_keyframes_ffmpeg(video_path: str, sample_interval: float = 0.5) -> list[tuple[float, bytes]]:
     """
-    从视频提取关键帧（智能采样）
+    使用 FFmpeg 从视频提取关键帧（避免 OpenCV 依赖）
 
     Args:
         video_path: 视频文件路径
@@ -18,33 +18,64 @@ def extract_keyframes(video_path: str, sample_interval: float = 0.5) -> list[tup
     Returns:
         [(时间戳, 帧图像的base64), ...]
     """
-    cap = cv2.VideoCapture(video_path)
-    fps = cap.get(cv2.CAP_PROP_FPS)
-    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-    total_seconds = total_frames / fps
+    try:
+        # 获取视频时长
+        result = subprocess.run(
+            [
+                "ffprobe",
+                "-v",
+                "error",
+                "-show_entries",
+                "format=duration",
+                "-of",
+                "default=noprint_wrappers=1:nokey=1:nokey=1",
+                video_path,
+            ],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        duration = float(result.stdout.strip())
+    except Exception as e:
+        raise ValueError(f"无法获取视频信息: {str(e)}")
 
     keyframes = []
-    frame_interval = int(fps * sample_interval)
+    timestamp = 0
 
-    current_frame = 0
-    while current_frame < total_frames:
-        cap.set(cv2.CAP_PROP_POS_FRAMES, current_frame)
-        ret, frame = cap.read()
+    while timestamp <= duration:
+        try:
+            # 使用 FFmpeg 提取指定时间的帧
+            result = subprocess.run(
+                [
+                    "ffmpeg",
+                    "-ss",
+                    str(timestamp),
+                    "-i",
+                    video_path,
+                    "-vframes",
+                    "1",
+                    "-q:v",
+                    "5",
+                    "-f",
+                    "image2",
+                    "-",
+                ],
+                capture_output=True,
+                timeout=30,
+            )
 
-        if not ret:
-            break
+            if result.returncode == 0 and result.stdout:
+                frame_b64 = base64.b64encode(result.stdout).decode("utf-8")
+                keyframes.append((timestamp, frame_b64))
 
-        # 压缩图像以减少 token 使用
-        frame_resized = cv2.resize(frame, (640, 480))
-        _, buffer = cv2.imencode(".jpg", frame_resized, [cv2.IMWRITE_JPEG_QUALITY, 75])
-        frame_b64 = base64.b64encode(buffer).decode("utf-8")
+        except Exception as e:
+            pass  # 跳过失败的帧
 
-        timestamp = current_frame / fps
-        keyframes.append((timestamp, frame_b64))
+        timestamp += sample_interval
 
-        current_frame += frame_interval
+    if not keyframes:
+        raise ValueError("无法从视频提取关键帧，请确保视频文件有效")
 
-    cap.release()
     return keyframes
 
 
@@ -61,8 +92,8 @@ def analyze_video_with_claude(video_path: str, api_key: str, base_url: str) -> d
     """
     client = Anthropic(api_key=api_key, base_url=base_url)
 
-    # 提取关键帧
-    keyframes = extract_keyframes(video_path, sample_interval=0.5)
+    # 提取关键帧（使用 FFmpeg）
+    keyframes = extract_keyframes_ffmpeg(video_path, sample_interval=0.5)
 
     if not keyframes:
         raise ValueError("无法从视频提取关键帧")

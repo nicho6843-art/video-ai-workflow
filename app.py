@@ -3,7 +3,7 @@ import os
 import json
 from pathlib import Path
 from datetime import datetime
-import cv2
+import subprocess
 
 from analysis import analyze_video_with_claude, generate_music_and_sfx_prompts
 from db import init_db, save_analysis, get_analysis_history, get_analysis_by_id, delete_analysis
@@ -96,11 +96,27 @@ with tab1:
             f.write(uploaded_file.getbuffer())
 
         # 检查视频时长
-        cap = cv2.VideoCapture(video_path)
-        fps = cap.get(cv2.CAP_PROP_FPS)
-        total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-        duration_seconds = total_frames / fps if fps > 0 else 0
-        cap.release()
+        try:
+            result = subprocess.run(
+                [
+                    "ffprobe",
+                    "-v",
+                    "error",
+                    "-show_entries",
+                    "format=duration",
+                    "-of",
+                    "default=noprint_wrappers=1:nokey=1",
+                    video_path,
+                ],
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+            duration_seconds = float(result.stdout.strip()) if result.stdout else 0
+        except Exception as e:
+            st.error(f"无法读取视频信息: {str(e)}")
+            os.remove(video_path)
+            st.stop()
 
         st.write(f"📹 视频时长: {duration_seconds:.1f} 秒")
 
