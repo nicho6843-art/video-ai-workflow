@@ -1,5 +1,5 @@
 streamlit==1.40.0
-opencv-python==4.10.0.84
+opencv-python-headless==4.10.0.84
 anthropic==0.34.0
 pydantic==2.6.0
 python-dotenv==1.0.1
