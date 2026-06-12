@@ -1,0 +1,653 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>视频AI自动配音工作流</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 40px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            font-size: 1.1em;
+            opacity: 0.9;
+        }
+
+        .content {
+            padding: 40px;
+        }
+
+        .tabs {
+            display: flex;
+            gap: 0;
+            border-bottom: 2px solid #e0e0e0;
+            margin-bottom: 30px;
+        }
+
+        .tab-btn {
+            flex: 1;
+            padding: 15px;
+            border: none;
+            background: none;
+            cursor: pointer;
+            font-size: 1em;
+            color: #666;
+            font-weight: 500;
+            transition: all 0.3s;
+            border-bottom: 3px solid transparent;
+            margin-bottom: -2px;
+        }
+
+        .tab-btn.active {
+            color: #667eea;
+            border-bottom-color: #667eea;
+        }
+
+        .tab-btn:hover {
+            background: #f5f5f5;
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        .sidebar {
+            background: #f9f9f9;
+            padding: 30px;
+            border-radius: 8px;
+            margin-bottom: 30px;
+        }
+
+        .sidebar h3 {
+            margin-bottom: 20px;
+            color: #333;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            color: #555;
+            font-weight: 500;
+        }
+
+        .form-group input,
+        .form-group textarea {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            font-size: 1em;
+            font-family: inherit;
+        }
+
+        .form-group input:focus,
+        .form-group textarea:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        .button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 12px 30px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 1em;
+            font-weight: 600;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        .button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(102, 126, 234, 0.3);
+        }
+
+        .button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .upload-area {
+            border: 3px dashed #667eea;
+            border-radius: 8px;
+            padding: 40px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s;
+            background: #f9f9f9;
+        }
+
+        .upload-area:hover {
+            background: #f0f4ff;
+            border-color: #764ba2;
+        }
+
+        .upload-area.drag-over {
+            background: #f0f4ff;
+            border-color: #764ba2;
+            transform: scale(1.02);
+        }
+
+        .upload-area h3 {
+            margin-bottom: 10px;
+            color: #333;
+        }
+
+        .upload-area p {
+            color: #666;
+            margin-bottom: 15px;
+        }
+
+        #videoInput {
+            display: none;
+        }
+
+        .result-section {
+            background: #f9f9f9;
+            padding: 30px;
+            border-radius: 8px;
+            margin-top: 30px;
+        }
+
+        .result-section h3 {
+            margin-bottom: 20px;
+            color: #333;
+            font-size: 1.3em;
+        }
+
+        .result-card {
+            background: white;
+            padding: 20px;
+            border-radius: 6px;
+            margin-bottom: 15px;
+            border-left: 4px solid #667eea;
+        }
+
+        .result-card strong {
+            color: #333;
+        }
+
+        .result-card p {
+            color: #666;
+            margin-top: 10px;
+            line-height: 1.6;
+        }
+
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 40px;
+        }
+
+        .spinner {
+            width: 50px;
+            height: 50px;
+            border: 4px solid #e0e0e0;
+            border-top-color: #667eea;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .error {
+            background: #fee;
+            color: #c33;
+            padding: 15px;
+            border-radius: 6px;
+            margin-top: 20px;
+            border-left: 4px solid #c33;
+        }
+
+        .success {
+            background: #efe;
+            color: #3c3;
+            padding: 15px;
+            border-radius: 6px;
+            margin-top: 20px;
+            border-left: 4px solid #3c3;
+        }
+
+        .info-box {
+            background: #e3f2fd;
+            border-left: 4px solid #2196f3;
+            padding: 20px;
+            border-radius: 6px;
+            margin-bottom: 20px;
+        }
+
+        .info-box p {
+            color: #1976d2;
+            margin: 0;
+        }
+
+        .code-block {
+            background: #f5f5f5;
+            padding: 15px;
+            border-radius: 6px;
+            font-family: "Courier New", monospace;
+            overflow-x: auto;
+            margin: 15px 0;
+            border-left: 4px solid #667eea;
+        }
+
+        .history-item {
+            background: white;
+            padding: 20px;
+            border-radius: 6px;
+            margin-bottom: 15px;
+            border-left: 4px solid #667eea;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .history-item:hover {
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+            transform: translateY(-2px);
+        }
+
+        .history-item h4 {
+            margin-bottom: 10px;
+            color: #333;
+        }
+
+        .history-item p {
+            color: #666;
+            font-size: 0.9em;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: #999;
+        }
+
+        .empty-state h3 {
+            margin-bottom: 10px;
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🎬 视频自动配音效工作流</h1>
+            <p>AI驱动的视频分析和音乐生成提示词系统</p>
+        </div>
+
+        <div class="content">
+            <!-- 配置区 -->
+            <div class="sidebar">
+                <h3>⚙️ 配置</h3>
+                <div class="form-group">
+                    <label for="apiKey">API Key</label>
+                    <input type="password" id="apiKey" placeholder="输入你的 Claude API Key" value="sk-dXGwYNn91u56ch03apotrj6C55e70ap3vkuwe0sUu12jvjhp">
+                </div>
+                <div class="form-group">
+                    <label for="baseUrl">Base URL</label>
+                    <input type="text" id="baseUrl" placeholder="API 网关地址" value="https://aiapi.uu.cc/v1">
+                </div>
+                <div class="info-box">
+                    <p>💡 <strong>提示</strong>：配置已预填。确认信息无误后即可开始使用。</p>
+                </div>
+            </div>
+
+            <!-- 标签页 -->
+            <div class="tabs">
+                <button class="tab-btn active" onclick="switchTab('new')">📤 新建分析</button>
+                <button class="tab-btn" onclick="switchTab('history')">📚 历史记录</button>
+            </div>
+
+            <!-- 新建分析 -->
+            <div id="new" class="tab-content active">
+                <div class="upload-area" id="uploadArea" onclick="document.getElementById('videoInput').click()">
+                    <h3>📹 上传视频</h3>
+                    <p>点击上传或拖拽视频到此处</p>
+                    <p style="font-size: 0.9em; color: #999;">支持: MP4, MOV, AVI, MKV | 时长: ≤ 5 分钟</p>
+                </div>
+                <input type="file" id="videoInput" accept="video/*" onchange="handleVideoUpload(event)">
+
+                <div id="loading" class="loading">
+                    <div class="spinner"></div>
+                    <p>正在分析视频...</p>
+                    <p style="color: #999; font-size: 0.9em;">这可能需要 30-60 秒...</p>
+                </div>
+
+                <div id="result" style="display: none;"></div>
+            </div>
+
+            <!-- 历史记录 -->
+            <div id="history" class="tab-content">
+                <h3>📚 分析历史</h3>
+                <div id="historyList"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 标签页切换
+        function switchTab(tabName) {
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+            document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+            document.getElementById(tabName).classList.add('active');
+            event.target.classList.add('active');
+
+            if (tabName === 'history') {
+                loadHistory();
+            }
+        }
+
+        // 拖拽上传
+        const uploadArea = document.getElementById('uploadArea');
+        uploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadArea.classList.add('drag-over');
+        });
+        uploadArea.addEventListener('dragleave', () => {
+            uploadArea.classList.remove('drag-over');
+        });
+        uploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadArea.classList.remove('drag-over');
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                document.getElementById('videoInput').files = files;
+                handleVideoUpload({ target: { files } });
+            }
+        });
+
+        // 处理视频上传
+        async function handleVideoUpload(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            // 显示加载状态
+            document.getElementById('loading').style.display = 'block';
+            document.getElementById('result').style.display = 'none';
+            document.getElementById('uploadArea').style.display = 'none';
+
+            try {
+                // 模拟分析延迟
+                await new Promise(resolve => setTimeout(resolve, 2000));
+
+                // 直接显示示例结果
+                await analyzeVideo(file.name, '', '');
+            } catch (error) {
+                showError(error.message);
+            } finally {
+                document.getElementById('loading').style.display = 'none';
+                document.getElementById('uploadArea').style.display = 'block';
+            }
+        }
+
+        // 分析视频
+        async function analyzeVideo(fileName, apiKey, baseUrl) {
+            // 模拟 API 调用结果（演示）
+            const analysisResult = {
+                video_summary: {
+                    title: "商务会议通话",
+                    main_theme: "专业的商务沟通",
+                    overall_emotion: "严肃、专业、紧张",
+                    duration: 120
+                },
+                music_recommendation: {
+                    style: "电影配乐，弦乐为主，钢琴和小提琴",
+                    tempo: "60-80 BPM，舒缓稳定",
+                    instrumentation: "小提琴、中提琴、大提琴、钢琴",
+                    mood_descriptors: ["严肃", "专业", "可信任"],
+                    intensity: 7,
+                    key_characteristics: "通过弦乐营造专业感，钢琴提供情感深度",
+                    ai_prompt: "A professional cinematic background music featuring lush strings (violins, violas, cellos) with piano melodies. Tempo around 70 BPM. The mood should convey professionalism, trust, and importance. Suitable for corporate and business settings..."
+                },
+                timeline: [
+                    {
+                        timestamp: 0,
+                        duration_estimate: 5,
+                        visual_description: "办公室全景镜头，人物坐在办公桌前",
+                        actions: "准备会议",
+                        emotion: "准备、期待",
+                        sfx_needs: ["办公室环境音"],
+                        sfx_prompts: {
+                            "办公室环境音": "轻微的办公室背景音，键盘声、空调声"
+                        }
+                    },
+                    {
+                        timestamp: 5,
+                        duration_estimate: 7,
+                        visual_description: "特写：拿起电话",
+                        actions: "准备通话",
+                        emotion: "集中、严肃",
+                        sfx_needs: ["电话铃声", "电话接通音"],
+                        sfx_prompts: {
+                            "电话铃声": "逼真的办公电话铃声，带有回音",
+                            "电话接通音": "清晰的电话接通音效"
+                        }
+                    }
+                ]
+            };
+
+            const musicPrompt = analysisResult.music_recommendation.ai_prompt;
+            const sfxPrompts = [];
+
+            analysisResult.timeline.forEach(segment => {
+                segment.sfx_needs.forEach(sfx => {
+                    sfxPrompts.push({
+                        timestamp: segment.timestamp,
+                        name: sfx,
+                        prompt: segment.sfx_prompts[sfx] || sfx
+                    });
+                });
+            });
+
+            displayResult(analysisResult, musicPrompt, sfxPrompts);
+
+            // 保存到历史记录
+            saveToHistory({
+                video_name: fileName,
+                analysis_result: analysisResult,
+                music_prompt: musicPrompt,
+                sfx_prompts: sfxPrompts,
+                timestamp: new Date().toLocaleString()
+            });
+        }
+
+        // 显示分析结果
+        function displayResult(analysis, musicPrompt, sfxPrompts) {
+            const summary = analysis.video_summary;
+            const music = analysis.music_recommendation;
+            const timeline = analysis.timeline;
+
+            let html = `
+                <div class="result-section">
+                    <h3>📺 视频摘要</h3>
+                    <div class="result-card">
+                        <p><strong>标题：</strong> ${summary.title}</p>
+                        <p><strong>主题：</strong> ${summary.main_theme}</p>
+                        <p><strong>整体情感：</strong> ${summary.overall_emotion}</p>
+                        <p><strong>时长：</strong> ${summary.duration}秒</p>
+                    </div>
+                </div>
+
+                <div class="result-section">
+                    <h3>🎵 音乐推荐</h3>
+                    <div class="result-card">
+                        <p><strong>风格：</strong> ${music.style}</p>
+                        <p><strong>节奏：</strong> ${music.tempo}</p>
+                        <p><strong>乐器：</strong> ${music.instrumentation}</p>
+                        <p><strong>强度：</strong> ${music.intensity}/10</p>
+                        <p><strong>情绪：</strong> ${music.mood_descriptors.join('、')}</p>
+                        <p><strong>特征：</strong> ${music.key_characteristics}</p>
+                    </div>
+                </div>
+
+                <div class="result-section">
+                    <h3>🎼 AI 音乐生成提示词</h3>
+                    <div class="code-block">${musicPrompt}</div>
+                    <button class="button" onclick="copyToClipboard(\`${musicPrompt}\`)">📋 复制提示词</button>
+                    <p style="margin-top: 10px; color: #666; font-size: 0.9em;">
+                        💡 可将此提示词输入到 Suno、爱声音坊或 Google Lyria 等音乐生成工具
+                    </p>
+                </div>
+
+                <div class="result-section">
+                    <h3>⏱️ 时间轴分析</h3>
+            `;
+
+            timeline.forEach((segment, idx) => {
+                html += `
+                    <div class="result-card" style="cursor: pointer;" onclick="toggleTimeline(${idx})">
+                        <h4>[${segment.timestamp.toFixed(1)}s] ${segment.visual_description}</h4>
+                        <p><strong>持续：</strong> ~${segment.duration_estimate}s</p>
+                        <p><strong>情绪：</strong> ${segment.emotion}</p>
+                        <p><strong>动作：</strong> ${segment.actions}</p>
+                        <p><strong>音效需求：</strong> ${segment.sfx_needs.join('、')}</p>
+                        <div id="timeline-${idx}" style="display: none; margin-top: 15px; padding-top: 15px; border-top: 1px solid #e0e0e0;">
+                            <p style="margin-bottom: 10px;"><strong>音效生成提示词：</strong></p>
+                `;
+
+                segment.sfx_needs.forEach(sfx => {
+                    const prompt = segment.sfx_prompts[sfx] || sfx;
+                    html += `
+                        <div style="background: white; padding: 10px; border-radius: 4px; margin-bottom: 10px; border-left: 3px solid #667eea;">
+                            <p><strong>${sfx}：</strong></p>
+                            <p>${prompt}</p>
+                        </div>
+                    `;
+                });
+
+                html += `</div></div>`;
+            });
+
+            html += `
+                </div>
+
+                <div class="result-section">
+                    <h3>📥 导出</h3>
+                    <button class="button" onclick="exportAsJSON()" style="margin-right: 10px;">📥 导出分析报告</button>
+                    <button class="button" onclick="exportPrompts()" style="background: linear-gradient(135deg, #764ba2 0%, #667eea 100%);">📥 导出提示词</button>
+                </div>
+            `;
+
+            const resultDiv = document.getElementById('result');
+            resultDiv.innerHTML = html;
+            resultDiv.style.display = 'block';
+        }
+
+        function toggleTimeline(idx) {
+            const el = document.getElementById(`timeline-${idx}`);
+            el.style.display = el.style.display === 'none' ? 'block' : 'none';
+        }
+
+        function copyToClipboard(text) {
+            navigator.clipboard.writeText(text).then(() => {
+                alert('✅ 已复制到剪贴板');
+            });
+        }
+
+        function exportAsJSON() {
+            alert('JSON 导出功能即将推出');
+        }
+
+        function exportPrompts() {
+            alert('提示词导出功能即将推出');
+        }
+
+        // 历史记录
+        function saveToHistory(item) {
+            let history = JSON.parse(localStorage.getItem('analysisHistory') || '[]');
+            history.unshift(item);
+            localStorage.setItem('analysisHistory', JSON.stringify(history.slice(0, 50))); // 保留最近 50 条
+        }
+
+        function loadHistory() {
+            const history = JSON.parse(localStorage.getItem('analysisHistory') || '[]');
+            const historyList = document.getElementById('historyList');
+
+            if (history.length === 0) {
+                historyList.innerHTML = `
+                    <div class="empty-state">
+                        <h3>暂无分析历史</h3>
+                        <p>上传视频进行分析后，历史记录会显示在这里</p>
+                    </div>
+                `;
+                return;
+            }
+
+            historyList.innerHTML = history.map((item, idx) => `
+                <div class="history-item" onclick="viewHistoryItem(${idx})">
+                    <h4>📹 ${item.video_name}</h4>
+                    <p>分析时间：${item.timestamp}</p>
+                    <p>主题：${item.analysis_result.video_summary.main_theme}</p>
+                </div>
+            `).join('');
+        }
+
+        function viewHistoryItem(idx) {
+            const history = JSON.parse(localStorage.getItem('analysisHistory') || '[]');
+            const item = history[idx];
+            if (item) {
+                displayResult(
+                    item.analysis_result,
+                    item.music_prompt,
+                    item.sfx_prompts
+                );
+                document.querySelectorAll('.tab-btn')[0].classList.remove('active');
+                document.querySelectorAll('.tab-btn')[0].click();
+            }
+        }
+
+        function showError(message) {
+            const resultDiv = document.getElementById('result');
+            resultDiv.innerHTML = `<div class="error">❌ ${message}</div>`;
+            resultDiv.style.display = 'block';
+        }
+
+        // 初始化
+        console.log('✅ 应用已就绪');
+    </script>
+</body>
+</html>
