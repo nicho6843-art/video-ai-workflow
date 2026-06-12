@@ -1,7 +1,7 @@
-streamlit==1.40.0
-opencv-python-headless==4.10.0.84
-anthropic==0.34.0
-pydantic==2.6.0
-python-dotenv==1.0.1
-pillow==10.2.0
+streamlit==1.32.0
+opencv-python-headless==4.8.1.78
+anthropic==0.32.0
+pydantic==2.5.0
+python-dotenv==1.0.0
+pillow==10.1.0
 requests==2.31.0
