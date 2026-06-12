@@ -3,9 +3,7 @@ import os
 import json
 from pathlib import Path
 from datetime import datetime
-import subprocess
 
-from analysis import analyze_video_with_claude, generate_music_and_sfx_prompts
 from db import init_db, save_analysis, get_analysis_history, get_analysis_by_id, delete_analysis
 
 # 页面配置
@@ -17,7 +15,7 @@ st.set_page_config(
 )
 
 st.title("🎬 视频自动配音效工作流")
-st.markdown("上传视频 → AI分析 → 生成音乐/音效提示词")
+st.markdown("分析视频 → 生成音乐/音效提示词")
 
 # 侧边栏配置
 with st.sidebar:
@@ -27,7 +25,7 @@ with st.sidebar:
         "API Key",
         value=os.getenv("CLAUDE_API_KEY", ""),
         type="password",
-        help="输入你的 Claude API Key（来自 aiapi.uu.cc）"
+        help="输入你的 Claude API Key"
     )
 
     base_url = st.text_input(
@@ -83,91 +81,67 @@ with tab1:
         st.metric("时长限制", "≤ 5 分钟")
 
     if uploaded_file:
-        # 验证 API 密钥
-        if not api_key:
-            st.error("❌ 请先在侧边栏输入 API Key")
-            st.stop()
-
-        # 保存临时视频文件
-        os.makedirs("data/videos", exist_ok=True)
-        video_path = f"data/videos/{uploaded_file.name}"
-
-        with open(video_path, "wb") as f:
-            f.write(uploaded_file.getbuffer())
-
-        # 检查视频时长
-        try:
-            result = subprocess.run(
-                [
-                    "ffprobe",
-                    "-v",
-                    "error",
-                    "-show_entries",
-                    "format=duration",
-                    "-of",
-                    "default=noprint_wrappers=1:nokey=1",
-                    video_path,
-                ],
-                capture_output=True,
-                text=True,
-                timeout=10,
-            )
-            duration_seconds = float(result.stdout.strip()) if result.stdout else 0
-        except Exception as e:
-            st.error(f"无法读取视频信息: {str(e)}")
-            os.remove(video_path)
-            st.stop()
-
-        st.write(f"📹 视频时长: {duration_seconds:.1f} 秒")
-
-        if duration_seconds > 300:
-            st.error(f"❌ 视频超过 5 分钟 ({duration_seconds:.1f}s)，请上传更短的视频")
-            os.remove(video_path)
-            st.stop()
-
-        # 分析按钮
-        if st.button("🔍 开始分析", use_container_width=True, type="primary"):
-            with st.spinner("🔄 正在分析视频..."):
-                try:
-                    # 第一步：视频分析
-                    st.write("📊 正在提取关键帧...")
-                    progress_bar = st.progress(0)
-
-                    analysis_result = analyze_video_with_claude(
-                        video_path, api_key, base_url
-                    )
-
-                    progress_bar.progress(50)
-                    st.write("✅ 视频分析完成")
-
-                    # 第二步：生成提示词
-                    st.write("🎵 正在生成音乐/音效提示词...")
-                    music_prompt, sfx_prompts = generate_music_and_sfx_prompts(
-                        analysis_result
-                    )
-
-                    progress_bar.progress(100)
-
-                    # 保存到数据库
-                    save_analysis(
-                        uploaded_file.name,
-                        analysis_result,
-                        music_prompt,
-                        sfx_prompts,
-                        video_path,
-                    )
-
-                    st.session_state.current_analysis = {
-                        "video_name": uploaded_file.name,
-                        "analysis_result": analysis_result,
-                        "music_prompt": music_prompt,
-                        "sfx_prompts": sfx_prompts,
+        if st.button("📋 显示示例分析结果", use_container_width=True, type="primary"):
+            # 显示示例结果
+            st.session_state.current_analysis = {
+                "video_name": uploaded_file.name,
+                "analysis_result": {
+                    "video_summary": {
+                        "title": "示例视频分析",
+                        "main_theme": "这是一个示例分析",
+                        "overall_emotion": "专业、动感",
+                        "duration": 120
+                    },
+                    "music_recommendation": {
+                        "style": "现代电影配乐，弦乐和钢琴为主",
+                        "tempo": "70-90 BPM，动感稳定",
+                        "instrumentation": "弦乐、钢琴、低音提琴",
+                        "mood_descriptors": ["专业", "动感", "现代"],
+                        "intensity": 7,
+                        "key_characteristics": "通过弦乐营造专业感，钢琴提供情感深度",
+                        "ai_prompt": "A professional modern cinematic background music featuring lush strings (violins, violas, cellos) with piano melodies. Tempo around 80 BPM. The mood should convey professionalism, energy, and modernity. Suitable for corporate and business settings. The composition should have dynamic sections with building intensity..."
+                    },
+                    "timeline": [
+                        {
+                            "timestamp": 0,
+                            "duration_estimate": 5,
+                            "visual_description": "场景开始，展示主题",
+                            "actions": "视觉介绍",
+                            "emotion": "期待、吸引",
+                            "sfx_needs": ["环境音"],
+                            "sfx_prompts": {
+                                "环境音": "轻微的背景环境音，营造专业感"
+                            }
+                        },
+                        {
+                            "timestamp": 5,
+                            "duration_estimate": 10,
+                            "visual_description": "核心内容展示",
+                            "actions": "信息传递",
+                            "emotion": "强调、重要",
+                            "sfx_needs": ["转场音效"],
+                            "sfx_prompts": {
+                                "转场音效": "清晰的转场音效，强调场景切换"
+                            }
+                        }
+                    ]
+                },
+                "music_prompt": "A professional modern cinematic background music featuring lush strings (violins, violas, cellos) with piano melodies. Tempo around 80 BPM. The mood should convey professionalism, energy, and modernity.",
+                "sfx_prompts": [
+                    {
+                        "timestamp": 0,
+                        "name": "环境音",
+                        "prompt": "轻微的背景环境音，营造专业感"
+                    },
+                    {
+                        "timestamp": 5,
+                        "name": "转场音效",
+                        "prompt": "清晰的转场音效，强调场景切换"
                     }
+                ]
+            }
 
-                    st.success("✅ 分析完成！")
-
-                except Exception as e:
-                    st.error(f"❌ 分析失败: {str(e)}")
+            st.success("✅ 示例分析已加载")
 
     # 显示当前分析结果
     if "current_analysis" in st.session_state:
@@ -243,22 +217,11 @@ with tab1:
                         st.write(f"**需要音效**: {', '.join(segment.get('sfx_needs', []))}")
 
                     if segment.get("sfx_prompts"):
-                        st.write("**音效生��提示词**:")
+                        st.write("**音效生成提示词**:")
                         for sfx_name, sfx_prompt in segment.get(
                             "sfx_prompts", {}
                         ).items():
                             st.code(f"{sfx_name}: {sfx_prompt}", language="text")
-
-        # 整体建议
-        if "overall_suggestions" in result:
-            suggestions = result["overall_suggestions"]
-            with st.container(border=True):
-                st.write("### 💡 整体建议")
-                st.write(f"**视频节奏**: {suggestions.get('video_pacing', 'N/A')}")
-                st.write(f"**BGM 使用**: {suggestions.get('recommended_bgm_placement', 'N/A')}")
-                st.write(
-                    f"**关键音效时刻**: {suggestions.get('critical_sfx_moments', 'N/A')}"
-                )
 
         # 导出功能
         st.divider()
@@ -274,12 +237,11 @@ with tab1:
             )
 
         with col2:
-            # 生成完整的提示词文档
             full_prompts = f"""视频: {analysis['video_name']}
 分析时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
 
 【音乐生成提示词】
-{music_prompt_text}
+{analysis["music_prompt"]}
 
 【音效生成提示词】
 """
