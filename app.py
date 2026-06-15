@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 from datetime import datetime
 
+from analysis import analyze_video_with_claude, generate_music_and_sfx_prompts
 from db import init_db, save_analysis, get_analysis_history, get_analysis_by_id, delete_analysis
 
 # 页面配置
@@ -27,12 +28,14 @@ with st.sidebar:
         type="password",
         help="输入你的 Claude API Key"
     )
+    st.session_state.api_key = api_key
 
     base_url = st.text_input(
         "Base URL",
         value=os.getenv("CLAUDE_BASE_URL", "https://aiapi.uu.cc/v1"),
         help="API 网关地址"
     )
+    st.session_state.base_url = base_url
 
     st.divider()
 
@@ -81,52 +84,91 @@ with tab1:
         st.metric("时长限制", "≤ 5 分钟")
 
     if uploaded_file:
-        if st.button("📋 显示示例分析结果", use_container_width=True, type="primary"):
-            # 显示示例结果
-            st.session_state.current_analysis = {
-                "video_name": uploaded_file.name,
-                "analysis_result": {
-                    "video_summary": {
-                        "title": "示例视频分析",
-                        "main_theme": "这是一个示例分析",
-                        "overall_emotion": "专业、动感",
-                        "duration": 120
-                    },
-                    "music_recommendation": {
-                        "style": "现代电影配乐，弦乐和钢琴为主",
-                        "tempo": "70-90 BPM，动感稳定",
-                        "instrumentation": "弦乐、钢琴、低音提琴",
-                        "mood_descriptors": ["专业", "动感", "现代"],
-                        "intensity": 7,
-                        "key_characteristics": "通过弦乐营造专业感，钢琴提供情感深度",
-                        "ai_prompt": "A professional modern cinematic background music featuring lush strings (violins, violas, cellos) with piano melodies. Tempo around 80 BPM. The mood should convey professionalism, energy, and modernity. Suitable for corporate and business settings. The composition should have dynamic sections with building intensity..."
-                    },
-                    "timeline": [
-                        {
-                            "timestamp": 0,
-                            "duration_estimate": 5,
-                            "visual_description": "场景开始，展示主题",
-                            "actions": "视觉介绍",
-                            "emotion": "期待、吸引",
-                            "sfx_needs": ["环境音"],
-                            "sfx_prompts": {
-                                "环境音": "轻微的背景环境音，营造专业感"
-                            }
-                        },
-                        {
-                            "timestamp": 5,
-                            "duration_estimate": 10,
-                            "visual_description": "核心内容展示",
-                            "actions": "信息传递",
-                            "emotion": "强调、重要",
-                            "sfx_needs": ["转场音效"],
-                            "sfx_prompts": {
-                                "转场音效": "清晰的转场音效，强调场景切换"
-                            }
+        col1, col2 = st.columns(2)
+
+        with col1:
+            if st.button("🔍 分析视频（使用 Claude AI）", use_container_width=True, type="primary"):
+                api_key = st.session_state.get("api_key", "")
+                base_url = st.session_state.get("base_url", "")
+
+                if not api_key:
+                    st.error("❌ 请先在侧边栏输入 API Key")
+                    st.stop()
+
+                # 保存上传的视频
+                os.makedirs("data/videos", exist_ok=True)
+                video_path = f"data/videos/{uploaded_file.name}"
+                with open(video_path, "wb") as f:
+                    f.write(uploaded_file.getbuffer())
+
+                # 分析视频
+                with st.spinner("🔄 正在分析视频...（这可能需要 1-3 分钟）"):
+                    try:
+                        analysis_result = analyze_video_with_claude(
+                            video_path, api_key, base_url
+                        )
+                        music_prompt, sfx_prompts = generate_music_and_sfx_prompts(
+                            analysis_result
+                        )
+
+                        # 保存到数据库
+                        save_analysis(
+                            uploaded_file.name,
+                            analysis_result,
+                            music_prompt,
+                            sfx_prompts,
+                            video_path,
+                        )
+
+                        st.session_state.current_analysis = {
+                            "video_name": uploaded_file.name,
+                            "analysis_result": analysis_result,
+                            "music_prompt": music_prompt,
+                            "sfx_prompts": sfx_prompts,
                         }
-                    ]
-                },
-                "music_prompt": "A professional modern cinematic background music featuring lush strings (violins, violas, cellos) with piano melodies. Tempo around 80 BPM. The mood should convey professionalism, energy, and modernity.",
+
+                        st.success("✅ 分析完成！")
+                        st.rerun()
+
+                    except Exception as e:
+                        st.error(f"❌ 分析失败: {str(e)}")
+
+        with col2:
+            if st.button("📋 显示示例结果", use_container_width=True):
+                st.session_state.current_analysis = {
+                    "video_name": uploaded_file.name,
+                    "analysis_result": {
+                        "video_summary": {
+                            "title": "示例视频分析",
+                            "main_theme": "这是一个示例分析",
+                            "overall_emotion": "专业、动感",
+                            "duration": 120
+                        },
+                        "music_recommendation": {
+                            "style": "现代电影配乐，弦乐和钢琴为主",
+                            "tempo": "70-90 BPM，动感稳定",
+                            "instrumentation": "弦乐、钢琴、低音提琴",
+                            "mood_descriptors": ["专业", "动感", "现代"],
+                            "intensity": 7,
+                            "key_characteristics": "通过弦乐营造专业感，钢琴提供情感深度",
+                            "ai_prompt": "A professional modern cinematic background music featuring lush strings (violins, violas, cellos) with piano melodies. Tempo around 80 BPM..."
+                        },
+                        "timeline": [
+                            {
+                                "timestamp": 0,
+                                "duration_estimate": 5,
+                                "visual_description": "场景开始",
+                                "actions": "视觉介绍",
+                                "emotion": "期待",
+                                "sfx_needs": ["环境音"],
+                                "sfx_prompts": {"环境音": "背景环保音"}
+                            }
+                        ]
+                    },
+                    "music_prompt": "A professional modern cinematic background music...",
+                    "sfx_prompts": [{"timestamp": 0, "name": "环境音", "prompt": "背景环保音"}]
+                }
+                st.success("✅ 示例已加载")
                 "sfx_prompts": [
                     {
                         "timestamp": 0,
